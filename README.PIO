@@ -1,0 +1,36 @@
+The program PIO_CHK can be used to see if your parallel printer port
+is workiing correctly and that all of the specified pins are
+implemented. To start the program from the DOS prompt type:
+
+   PIO_CHK <enter>
+
+When the program starts, it asks you for a port number. You should
+enter 1, 2 or 3 which represets the ports LPT1, LPT2 and LPT3 if
+they exist. The program then shows you the base address for the
+port which DOS provides. If the base address is 0, this means
+that DOS does not think that the port exists.
+
+The program then displays information on the pins of the parallel
+port. It then asks you for a pin number to either toggle or view.
+If you give the pin number of an output pin and press <enter>, the
+pin is read in, toggled, written out and read in again. The results
+of these operations are displayed on the screen. If you look at the
+pin with a voltmeter, logic probe or scope, you should see the pin
+changing state. If you select an input pin, the value read from
+that pin is shown on the display. To see a change, you must apply
+a voltage (0 or 5 volts) to the input pin. You can jumper an output
+pin back to an input pin and cause the input pin to change state
+by toggling the output pin and then looking at the input pin. Note
+that some of the parallel port pins are inverted from the external
+pins to internal values.
+
+You should test all specified pins to make sure they are all
+implemented and working. The parallel port on the back of your PC
+should be a female DB-25 connector which has the following pin
+numbering pattern:
+
+  13  12  11  10  09  08  07  06  05  04  03  02  01
+    25  24  23  22  21  20  19  18  17  16  15  14
+
+when looking into the connector from the back of your PC. Notice
+that the longer row of pins is numbered 01 to 13.
