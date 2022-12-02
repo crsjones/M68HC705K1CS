@@ -1,0 +1,397 @@
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 1
+
+
+
+                   1  ;--------------
+                   2  ; T I M E O U T
+                   3  ;--------------
+                   4  ;
+                   5  ; MC68HC705K1 based 60/90 second timer
+                   6  ; by Craig R. S. Jones
+                   7  ; Version 1.0 (c) 1993
+                   8  ;
+ 0200              9  $list
+ 0200             10  $base   10T
+                  11  ;
+                  12  ; Mask Option Register
+                  13  ;
+                  14  ; bit 7 SWPDI = 0 software pulldown enabled
+                  15  ; bit 6 PIN3  = 1 three pin oscillator configured
+                  16  ; bit 5 RC    = 1 external RC network
+                  17  ; bit 4 SWAIT = 0 STOP instruction not converted to wait
+                  18  ; bit 3 LVRE  = 1 Low voltage reset enabled
+                  19  ; bit 2 PIRQ  = 1 PA3-PA0 enabled as external interrupt 
+                                                                        sources
+                  20  ; bit 1 LEVEL = 0 PA3-PA0 pins positive edge triggered 
+                                                                           only
+                  21  ; bit 0 COPEN = 1 COP watchdog enabled
+                  22  ;
+                  23  ;         MOR = $6d  ensure MOR register is programmed 
+                                                                          thus.
+                  24  ;
+                  25  ;------------------------
+                  26  ; ram variables and flags
+                  27  ;------------------------
+ 00E0             28          org     ramstart
+ 00E0             29  flags   equ     $00e0           ;flag register
+ 00E0             30  rtiflg  equ     0               ;Real Time Interrupt Flag
+ 00E0             31  tofflg  equ     1               ;Timer Overflow Flag
+ 00E0             32  go      equ     2               ;count down enable flag
+ 00E0             33  keya    equ     3               ;push button A flag
+ 00E0             34  keyb    equ     4               ;push button B flag
+ 00E0             35  keyap   equ     5               ;push button A previous 
+                                                                          state
+ 00E0             36  keybp   equ     6               ;push button B previous 
+                                                                          state
+ 00E0             37  count   equ     $00e1           ;down count register
+ 00E0             38  timout  equ     $00e2           ;power down timer
+ 00E0             39  defalt  equ     $00e3           ;default start up time
+ 00E0             40  tofcnt  equ     $00e4           ;tof interrupt counter
+ 00E0             41  deltim  equ     $00e5           ;beep delay time
+                  42  ;-----------------------
+                  43  ; initial power up reset
+                  44  ;-----------------------
+ 0200             45          org     romstart
+                  46  ;
+                  47  ; initialize port a
+                  48  ;
+ 0200 3F00        49          clr     porta
+ 0202 A6FC        50          lda     #{ddra7.+ddra6.+ddra5.+ddra4.+ddra3.+ddra
+                                                                            2.}
+ 0204 B704        51          sta     ddra
+ 0206 B710        52          sta     pdra
+
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 2
+
+
+
+                  53  ;
+                  54  ; initialize port b
+                  55  ;
+ 0208 3F01        56          clr     portb
+ 020A A601        57          lda     #ddrb0.
+ 020C B705        58          sta     ddrb
+                  59  ;
+                  60  ; initialize registers
+                  61  ;
+ 020E 3FE2        62          clr     timout          ;clear power down timer
+ 0210 3FE4        63          clr     tofcnt          ;clear tof interrupt 
+                                                                        counter
+ 0212 3FE0        64          clr     flags           ;clear flag register
+                  65  ;
+                  66  ; initialize count down time default
+                  67  ;
+ 0214 A660        68          lda     #$60            ;BCD for 60 seconds
+ 0216 B7E3        69          sta     defalt
+                  70  ;
+                  71  ; enter stop mode to wait for key interrupt
+                  72  ;
+ 0218 8E          73          stop
+                  74  ;-----------------
+                  75  ; push button wake
+                  76  ;-----------------
+ 0219 1F0A        77  wake    bclr    irqe,iscr       ;disable further key 
+                                                                     interrupts
+ 021B 120A        78          bset    irqr,iscr       ;clear interrupt flag
+ 021D B6E3        79          lda     defalt          ;set down counter to
+ 021F B7E1        80          sta     count           ;default count down time
+ 0221 A633        81          lda     #{toie.+rtie.+rt1.+rt0.}
+ 0223 B708        82          sta     tcsr            ;enable RTI,TOF timer
+ 0225 1AE0        83          bset    keyap,flags
+ 0227 1CE0        84          bset    keybp,flags     ;ignore power up key 
+                                                                         stroke
+ 0229 9A          85          cli                     ;enable timer interrupts
+                  86  ;----------------------------------
+                  87  ; wait for rti, tof interrupt flags
+                  88  ;----------------------------------
+ 022A 00E005      89  main    brset   rtiflg,flags,dobeep ;rti interrupt flag 
+                                                                  - handle beep
+ 022D 02E025      90          brset   tofflg,flags,dokeys ;tof interrupt flag 
+                                                                  - handle keys
+ 0230 20F8        91          bra     main
+                  92  ;-----------------------
+                  93  ; check if beep required
+                  94  ;-----------------------
+ 0232 11E0        95  dobeep  bclr    rtiflg,flags    ;clear rti flag
+ 0234 05E0F3      96          brclr   go,flags,main   ;not counting down
+                  97  ;
+                  98  ; is count = 00?
+                  99  ;
+ 0237 B6E1       100          lda     count
+ 0239 2606       101          bne     dobep1          ;count not = 00
+                 102  ;
+                 103  ; do distinctive beep for 00
+                 104  ;
+ 023B AE80       105          ldx     #$80
+
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 3
+
+
+
+ 023D A608       106          lda     #$08            ;set up beep
+ 023F 200E       107          bra     dobep4          ;do beep
+                 108  ;
+                 109  ; is least significant digit = 0?
+                 110  ;
+ 0241 A40F       111  dobep1  and     #$0f
+ 0243 2706       112          beq     dobep3          ;beep if count lsd = 0
+                 113  ;
+                 114  ; is most significant digit = 0?
+                 115  ;
+ 0245 B6E1       116  dobep2  lda     count
+ 0247 A4F0       117          and     #$f0            ;beep if count msd = 0
+ 0249 26DF       118          bne     main
+ 024B A603       119  dobep3  lda     #$03            ;set up beep
+ 024D AE30       120          ldx     #$30
+ 024F B7E5       121  dobep4  sta     deltim
+ 0251 AD50       122          bsr     beep            ;do beep
+ 0253 20D5       123          bra     main
+                 124  ;--------------------
+                 125  ; handle push buttons
+                 126  ;--------------------
+ 0255 13E0       127  dokeys  bclr    tofflg,flags    ;clear tof flag
+ 0257 06E005     128          brset   keya,flags,keyahi   ;key A pressed?
+ 025A 08E02F     129          brset   keyb,flags,keybhi   ;key B pressed?
+ 025D 20CB       130          bra     main            ;no keys pressed
+                 131  ;-------------
+                 132  ; handle key A
+                 133  ;-------------
+ 025F 17E0       134  keyahi  bclr    keya,flags      ;clear key A flag
+                 135  ;
+                 136  ; are we counting down?
+                 137  ;
+ 0261 05E00A     138          brclr   go,flags,keyai2 ;counting down?
+                 139  ;----------------------------
+                 140  ; counting down - reset timer
+                 141  ;----------------------------
+ 0264 3FE2       142          clr     timout          ;reset power down timer
+ 0266 15E0       143          bclr    go,flags        ;stop count down
+ 0268 B6E3       144  keyai1  lda     defalt
+ 026A B7E1       145          sta     count           ;reset count
+ 026C 202B       146          bra     dokey1          ;do key beep
+                 147  ;------------------
+                 148  ; not counting down
+                 149  ;------------------
+                 150  ;
+                 151  ; if timer paused just relaod default
+                 152  ;
+ 026E B6E1       153  keyai2  lda     count
+ 0270 A190       154          cmp     #$90
+ 0272 2706       155          beq     keyai3          ;toggle default
+ 0274 A160       156          cmp     #$60
+ 0276 2702       157          beq     keyai3          ;toggle default
+ 0278 20EE       158          bra     keyai1          ;relaod default
+                 159  ;
+                 160  ; toggle default time
+                 161  ;
+ 027A B6E3       162  keyai3  lda     defalt
+ 027C A190       163          cmp     #$90            ;current default = 90?
+
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 4
+
+
+
+ 027E 2708       164          beq     keyai5
+ 0280 A690       165          lda     #$90            ;no, make it 90
+ 0282 B7E3       166  keyai4  sta     defalt          ;new default time
+ 0284 B7E1       167          sta     count           ;new count
+ 0286 2011       168          bra     dokey1
+ 0288 A660       169  keyai5  lda     #$60            ;make default 60
+ 028A 20F6       170          bra     keyai4
+                 171  ;-------------
+                 172  ; handle key B
+                 173  ;-------------
+ 028C 19E0       174  keybhi  bclr    keyb,flags      ;clear key b flag
+                 175  ;
+                 176  ; are we counting down?
+                 177  ;
+ 028E 05E006     178          brclr   go,flags,keybi1 ;counting down?
+                 179  ;----------------------------
+                 180  ; counting down - pause timer
+                 181  ;----------------------------
+ 0291 15E0       182          bclr    go,flags        ;stop count down
+ 0293 3FE2       183          clr     timout          ;clear power down timer
+ 0295 2002       184          bra     dokey1
+                 185  ;--------------------
+                 186  ; start counting down
+                 187  ;--------------------
+ 0297 14E0       188  keybi1  bset    go,flags        ;start count down
+                 189  ;--------------------------
+                 190  ; acknowledge key with beep
+                 191  ;--------------------------
+ 0299 A604       192  dokey1  lda     #$04
+ 029B AE20       193          ldx     #$20
+ 029D B7E5       194          sta     deltim
+ 029F AD02       195          bsr     beep
+ 02A1 2087       196          bra     main
+                 197  ;----------
+                 198  ; do a beep
+                 199  ;----------
+                 200  ; entry : deltim = 1/2 period
+                 201  ;         x = number of cycles
+ 02A3 9B         202  beep    sei                     ;disable TOF interrupts
+ 02A4 1001       203  beep1   bset    0,portb         ;set beeper output
+ 02A6 B6E5       204          lda     deltim
+ 02A8 4A         205  loop1   deca                    ;delay 1/2 period
+ 02A9 26FD       206          bne     loop1
+ 02AB 1101       207          bclr    0,portb         ;clear beeper output
+ 02AD B6E5       208          lda     deltim
+ 02AF 4A         209  loop2   deca                    ;delay 1/2 period
+ 02B0 26FD       210          bne     loop2
+ 02B2 5A         211          decx
+ 02B3 26EF       212          bne     beep1           ;done all cycles?
+ 02B5 9A         213          cli                     ;enable TOF interrupts
+ 02B6 81         214          rts
+                 215  ;--------------------------------
+                 216  ; timer interrupt service routine
+                 217  ;--------------------------------
+ 02B7 0E083A     218  timer   brset   tof,tcsr,tofint ;tof interrupt
+                 219  ;
+                 220  ; decrement time remaining counter
+                 221  ;
+
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 5
+
+
+
+ 02BA 1408       222  rtint   bset    rtifr,tcsr      ;clear real time 
+                                                                      interrupt
+ 02BC 10E0       223          bset    rtiflg,flags    ;set one second flag
+ 02BE A600       224          lda     #0
+ 02C0 C703F0     225          sta     copr            ;clear cop
+                 226  ;
+                 227  ; are we counting down?
+                 228  ;
+ 02C3 05E01F     229          brclr   go,flags,rtint3
+                 230  ;
+                 231  ;  count down
+                 232  ;
+ 02C6 B6E1       233          lda     count           ;is lsd zero?
+ 02C8 A40F       234          and     #$0f
+ 02CA 2703       235          beq     rtint1          ;lsd is zero
+ 02CC 3AE1       236          dec     count           ;just dec and exit
+ 02CE 80         237          rti
+ 02CF B6E1       238  rtint1  lda     count           ;is msd zero?
+ 02D1 A4F0       239          and     #$f0
+ 02D3 2707       240          beq     rtint2          ;msd is zero
+ 02D5 B6E1       241          lda     count
+ 02D7 A007       242          sub     #$07            ;tens roll over
+ 02D9 B7E1       243          sta     count
+ 02DB 80         244          rti
+                 245  ;
+                 246  ; time remaining is zero - stop count down mode
+                 247  ;
+ 02DC 15E0       248  rtint2  bclr    go,flags        ;stop count down mode
+ 02DE 3FE2       249          clr     timout          ;clear power down timer
+ 02E0 B6E3       250          lda     defalt
+ 02E2 B7E1       251          sta     count           ;re-load default count
+ 02E4 80         252          rti
+                 253  ;-----------------------
+                 254  ; check power down delay
+                 255  ;-----------------------
+ 02E5 B6E2       256  rtint3  lda     timout
+ 02E7 A13C       257          cmpa    #60             ;time to power down?
+ 02E9 2703       258          beq     rtint4          ;power down
+ 02EB 3CE2       259          inc     timout          ;not yet inc timout
+ 02ED 80         260          rti
+                 261  ;
+                 262  ; stop processing
+                 263  ;
+ 02EE 120A       264  rtint4  bset    irqr,iscr       ;reset any pending 
+                                                                     interrupts
+ 02F0 3FE2       265          clr     timout          ;clear power down timer
+ 02F2 9C         266          rsp                     ;reset stack pointer
+ 02F3 8E         267          stop                    ;shut down
+                 268  ;-------------
+                 269  ; scan display
+                 270  ;-------------
+ 02F4 1608       271  tofint  bset    tofr,tcsr       ;clear tof interrupt
+ 02F6 12E0       272          bset    tofflg,flags    ;set tof flag
+ 02F8 3CE4       273          inc     tofcnt          ;inc tof counter
+                 274  ;
+                 275  ; if we are counting down - scan the display
+                 276  ;
+ 02FA 04E003     277          brset   go,flags,tofit1 ;are we counting down?
+
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 6
+
+
+
+                 278  ;
+                 279  ; if we are not counting down - blink the display
+                 280  ;
+ 02FD 0BE420     281          brclr   5,tofcnt,tstkey ;skip scanning sometimes
+                 282  ;-----------------
+                 283  ; scan the display
+                 284  ;-----------------
+ 0300 B6E1       285  tofit1  lda     count
+ 0302 A4F0       286          and     #$f0            ;strip lsd
+ 0304 AA08       287          ora     #$08            ;turn on tens transistor
+ 0306 B700       288          sta     porta           ;output tens digit
+ 0308 A60A       289          lda     #10
+ 030A 4A         290  tofit2  deca
+ 030B 26FD       291          bne     tofit2          ;tens on time delay
+ 030D B6E1       292          lda     count
+ 030F A40F       293          and     #$0f            ;strip msd
+ 0311 48         294          asla                    ;shift units
+ 0312 48         295          asla                    ;to upper
+ 0313 48         296          asla                    ;nybble
+ 0314 48         297          asla                    ;for output
+ 0315 AA04       298          ora     #$04            ;turn on units transistor
+ 0317 B700       299          sta     porta           ;output units digit
+ 0319 A60A       300          lda     #10
+ 031B 4A         301  tofit3  deca
+ 031C 26FD       302          bne     tofit3          ;units on time delay
+ 031E 3F00       303          clr     porta           ;turn off displays
+                 304  ;--------------------
+                 305  ; check for key press
+                 306  ;--------------------
+ 0320 05E41B     307  tstkey  brclr   2,tofcnt,tstky4 ;allow debounce time
+                 308  ;
+                 309  ; key A pressed?
+                 310  ;
+ 0323 020004     311          brset   pa1,porta,tstky1   ;key A pressed
+ 0326 1BE0       312          bclr    keyap,flags     ;clear previous status
+ 0328 2007       313          bra     tstky2
+                 314  ;
+                 315  ; key A pressed, was it pressed last time?
+                 316  ;
+ 032A 0AE004     317  tstky1  brset   keyap,flags,tstky2 ;pressed last time
+ 032D 16E0       318          bset    keya,flags      ;set key A flag
+ 032F 1AE0       319          bset    keyap,flags     ;set previous status
+                 320  ;
+                 321  ; key b pressed?
+                 322  ;
+ 0331 000003     323  tstky2  brset   pa0,porta,tstky3   ;key B pressed
+ 0334 1DE0       324          bclr    keybp,flags     ;clear previous status
+ 0336 80         325          rti
+                 326  ;
+                 327  ; key B pressed, was it pressed last time?
+                 328  ;
+ 0337 0CE004     329  tstky3  brset   keybp,flags,tstky4 ;pressed last time
+ 033A 18E0       330          bset    keyb,flags      ;set key B flag
+ 033C 1CE0       331          bset    keybp,flags     ;set previous status
+ 033E 80         332  tstky4  rti
+                 333  ;--------
+                 334  ; vectors
+                 335  ;--------
+
+
+TIMEOUT.ASM            Assembled with IASM   05/23/1993  14:14  PAGE 7
+
+
+
+ 03F8            336          org     vectors
+ 03F8 02B7       337          dw      timer           ;timer interrupt service 
+                                                                        routine
+ 03FA 0219       338          dw      wake            ;external interrupt 
+                                                                service routine
+ 03FC 033E       339          dw      tstky4          ;swi interrupt service 
+                                                                        routine
+ 03FE 0200       340          dw      romstart        ;reset vector

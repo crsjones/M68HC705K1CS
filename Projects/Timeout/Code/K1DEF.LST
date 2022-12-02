@@ -1,0 +1,172 @@
+
+K1DEF.ASM              Assembled with IASM   05/23/1993  14:11  PAGE 1
+
+
+
+                   1  ;----------------------
+                   2  ;MC68HC05K1 Definitions
+                   3  ;----------------------
+ 0200              4  PORTA   equ     $00     ;Port A data register
+ 0200              5  PA0     equ     0       ;Port A bit 0
+ 0200              6  PA1     equ     1       ;Port A bit 1
+ 0200              7  PA2     equ     2       ;Port A bit 2
+ 0200              8  PA3     equ     3       ;Port A bit 3
+ 0200              9  PA4     equ     4       ;Port A bit 4
+ 0200             10  PA5     equ     5       ;Port A bit 5
+ 0200             11  PA6     equ     6       ;Port A bit 6
+ 0200             12  PA7     equ     7       ;Port A bit 7
+ 0200             13  PA0.    equ     $01     ;Bit position PA0
+ 0200             14  PA1.    equ     $02     ;Bit position PA1
+ 0200             15  PA2.    equ     $04     ;Bit position PA2
+ 0200             16  PA3.    equ     $08     ;Bit position PA3
+ 0200             17  PA4.    equ     $10     ;Bit position PA4
+ 0200             18  PA5.    equ     $20     ;Bit position PA5
+ 0200             19  PA6.    equ     $40     ;Bit position PA6
+ 0200             20  PA7.    equ     $80     ;Bit position PA7
+                  21  ;
+ 0200             22  PORTB   equ     $01     ;Port B data register
+ 0200             23  PB0     equ     0       ;Port B bit 0
+ 0200             24  PB1     equ     1       ;Port B bit 1
+ 0200             25  PB0.    equ     $01     ;Bit position PB0
+ 0200             26  PB1.    equ     $02     ;Bit position PB1
+                  27  ;
+ 0200             28  DDRA    equ     $04     ;Port A Data Direction Register
+ 0200             29  DDRA0   equ     0       ;Port A DDR bit 0
+ 0200             30  DDRA1   equ     1       ;Port A DDR bit 1
+ 0200             31  DDRA2   equ     2       ;Port A DDR bit 2
+ 0200             32  DDRA3   equ     3       ;Port A DDR bit 3
+ 0200             33  DDRA4   equ     4       ;Port A DDR bit 4
+ 0200             34  DDRA5   equ     5       ;Port A DDR bit 5
+ 0200             35  DDRA6   equ     6       ;Port A DDR bit 6
+ 0200             36  DDRA7   equ     7       ;Port A DDR bit 7
+                  37  ;
+ 0200             38  DDRB    equ     $05     ;Port B Data Direction Register
+ 0200             39  DDRB0   equ     0       ;Port B DDR bit 0
+ 0200             40  DDRB1   equ     1       ;Port B DDR bit 1
+                  41  ;
+ 0200             42  TCSR    equ     $08     ;Timer Status and Control 
+                                                                       Register
+ 0200             43  RT0     equ     0       ;Real-Time Interrupt Rate Select 
+                                                                          bit 0
+ 0200             44  RT1     equ     1       ;Real-Time Interrupt Rate Select 
+                                                                          bit 1
+ 0200             45  RTIFR   equ     2       ;Real-Time Interrupt Flag Reset
+ 0200             46  TOFR    equ     3       ;Timer Overflow Flag Reset
+ 0200             47  RTIE    equ     4       ;Real-Time Interrupt Enable
+ 0200             48  TOIE    equ     5       ;Timer Overflow Interrupt Enable
+ 0200             49  RTIF    equ     6       ;Real-Time Interrupt Flag
+ 0200             50  TOF     equ     7       ;Timer Overflow Flag
+ 0200             51  RT0.    equ     $01     ;Real-Time Interrupt Rate Select 
+                                                                          bit 0
+ 0200             52  RT1.    equ     $02     ;Real-Time Interrupt Rate Select 
+                                                                          bit 1
+ 0200             53  TOFR.   equ     $08     ;Timer Overflow Flag Reset
+
+
+K1DEF.ASM              Assembled with IASM   05/23/1993  14:11  PAGE 2
+
+
+
+ 0200             54  RTIE.   equ     $10     ;Real-Time Interrupt Enable
+ 0200             55  TOIE.   equ     $20     ;Timer Overflow Interrupt Enable
+ 0200             56  RTIF.   equ     $40     ;Real-Time Interrupt Flag
+ 0200             57  TOF.    equ     $80     ;Timer Overflow Flag
+                  58  ;
+ 0200             59  TCR     equ     $09     ;Timer Counter Register
+                  60  ;
+ 0200             61  ISCR    equ     $0A     ;Interrupt Status and Control 
+                                                                       Register
+ 0200             62  IRQR    equ     1       ;Interrupt Request Reset
+ 0200             63  IRQF    equ     3       ;External Interrupt Request Flag
+ 0200             64  IRQE    equ     7       ;External Interrupt Request 
+                                                                         Enable
+                  65  ;
+ 0200             66  PEBSR   equ     $0E     ;Personality EPROM Bit Select 
+                                                                       Register
+ 0200             67  PEB0    equ     0       ;Select PEPROM bit 0
+ 0200             68  PEB1    equ     1       ;Select PEPROM bit 1
+ 0200             69  PEB2    equ     2       ;Select PEPROM bit 2
+ 0200             70  PEB3    equ     3       ;Select PEPROM bit 3
+ 0200             71  PEB4    equ     4       ;Select PEPROM bit 4
+ 0200             72  PEB5    equ     5       ;Select PEPROM bit 5
+ 0200             73  PEB6    equ     6       ;Select PEPROM bit 6
+ 0200             74  PEB7    equ     7       ;Select PEPROM bit 7
+ 0200             75  PEB0.   equ     $01     ;Bit position PEB0
+ 0200             76  PEB1.   equ     $02     ;Bit position PEB1
+ 0200             77  PEB2.   equ     $04     ;Bit position PEB2
+ 0200             78  PEB3.   equ     $08     ;Bit position PEB3
+ 0200             79  PEB4.   equ     $10     ;Bit position PEB4
+ 0200             80  PEB5.   equ     $20     ;Bit position PEB5
+ 0200             81  PEB6.   equ     $40     ;Bit position PEB6
+ 0200             82  PEB7.   equ     $80     ;Bit position PEB7
+                  83  ;
+ 0200             84  PESCR   equ     $0F     ;Personality EPROM Status and 
+                                                               Control Register
+ 0200             85  PEPRZF  equ     0       ;Personality EPROM Row Zero Flag
+ 0200             86  PEPGM   equ     5       ;Personality EPROM Program 
+                                                                        Control
+ 0200             87  PEDATA  equ     7       ;Personality EPROM Data
+ 0200             88  PEPRZF. equ     $01     ;Bit position PE Row Zero Flag
+ 0200             89  PEDATA. equ     $80     ;Bit position PE Data
+                  90  ;
+ 0200             91  PDRA    equ     $10     ;Pull-Down Register Port A 
+                                                                   (Write-Only)
+ 0200             92  PDIA0   equ     0       ;Pulldown inhibit for PA0
+ 0200             93  PDIA1   equ     1       ;Pulldown inhibit for PA1
+ 0200             94  PDIA2   equ     2       ;Pulldown inhibit for PA2
+ 0200             95  PDIA3   equ     3       ;Pulldown inhibit for PA3
+ 0200             96  PDIA4   equ     4       ;Pulldown inhibit for PA4
+ 0200             97  PDIA5   equ     5       ;Pulldown inhibit for PA5
+ 0200             98  PDIA6   equ     6       ;Pulldown inhibit for PA6
+ 0200             99  PDIA7   equ     7       ;Pulldown inhibit for PA7
+                 100  ;
+ 0200            101  PDRB    equ     $11     ;Pull-Down Register Port B 
+                                                                   (Write-Only)
+ 0200            102  PDIB0   equ     0       ;Pulldown inhibit for PB0
+ 0200            103  PDIB1   equ     1       ;Pulldown inhibit for PB1
+ 0200            104  PDIB2   equ     2       ;Pulldown inhibit for PB2
+
+
+K1DEF.ASM              Assembled with IASM   05/23/1993  14:11  PAGE 3
+
+
+
+ 0200            105  PDIB3   equ     3       ;Pulldown inhibit for PB3
+ 0200            106  PDIB4   equ     4       ;Pulldown inhibit for PB4
+ 0200            107  PDIB5   equ     5       ;Pulldown inhibit for PB5
+ 0200            108  PDIB6   equ     6       ;Pulldown inhibit for PB6
+ 0200            109  PDIB7   equ     7       ;Pulldown inhibit for PB7
+                 110  ;
+ 0200            111  MOR     equ     $17     ;Mask Option Register (EPROM 
+                                                                          byte)
+ 0200            112  COPEN   equ     0       ;COP Watchdog Enable
+ 0200            113  LEVEL   equ     1       ;External Interrupt Sensitivity
+ 0200            114  PIRQ    equ     2       ;Port A Interrupt Function Enable
+ 0200            115  LVRE    equ     3       ;Low Voltage Reset Enable
+ 0200            116  SWAIT   equ     4       ;STOP conversion to WAIT
+ 0200            117  RC      equ     5       ;RC Oscillator select
+ 0200            118  PIN3    equ     6       ;Three-Pin RC Oscillator Select
+ 0200            119  SWPDI   equ     7       ;Software Pull-Down Inhibit
+ 0200            120  PIRQ.   equ     $04     ;Bit position PIRQ
+ 0200            121  LVRE.   equ     $08     ;Bit position LVRE
+ 0200            122  RC.     equ     $20     ;Bit position RC
+ 0200            123  PIN3.   equ     $40     ;Bit position PIN3
+                 124  ;
+ 0200            125  EPROG   equ     $18     ;EPROM Programming Control 
+                                                                       Register
+ 0200            126  EPGM    equ     0       ;EPROM Programming
+ 0200            127  MPGM    equ     1       ;Mask Option Register Programming
+ 0200            128  ELAT    equ     2       ;EPROM Bus Latch
+ 0200            129  EPGM.   equ     $01     ;Bit position EPGM
+ 0200            130  MPGM.   equ     $02     ;Bit position MPGM
+ 0200            131  ELAT.   equ     $04     ;Bit position ELAT
+                 132  ;
+ 0200            133  COPR    equ     $03F0   ;COP Reset Register
+ 0200            134  COPC    equ     0       ;COP watchdog clear
+ 0200            135  COPC.   equ     $01     ;bit position COPC
+                 136  ;
+ 0200            137  ramstart        equ     $00E0   ;Start of on chip RAM
+ 0200            138  romstart        equ     $0200   ;Start of on chip 
+                                                                      ROM/EPROM
+ 0200            139  romend  equ     $03EF   ;End of on chip ROM/EPROM
+ 0200            140  vectors equ     $03F8   ;Start of Reset/Interrupt vectors

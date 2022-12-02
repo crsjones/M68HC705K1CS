@@ -1,0 +1,575 @@
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 1
+
+
+
+                   1  ;------------
+                   2  ; R E A C T !
+                   3  ;------------
+                   4  ;
+                   5  ; MC68HC705K1 based Reaction Timer
+                   6  ; by Craig R. S. Jones
+                   7  ; Version 1.0 September 1993
+                   8  ;
+ 0200              9  $list
+ 0200             10  $base   10T
+                  11  ;
+                  12  ; Mask Option Register
+                  13  ;
+                  14  ; bit 7 SWPDI = 0 software pulldown enabled
+                  15  ; bit 6 PIN3  = 0 two pin oscillator configured
+                  16  ; bit 5 RC    = 0 Configure for crystal oscillator
+                  17  ; bit 4 SWAIT = 0 STOP instruction not converted to wait
+                  18  ; bit 3 LVRE  = 1 Low voltage reset enabled
+                  19  ; bit 2 PIRQ  = 1 PA3-PA0 enabled as external interrupt 
+                                                                        sources
+                  20  ; bit 1 LEVEL = 0 PA3-PA0 pins positive edge triggered 
+                                                                           only
+                  21  ; bit 0 COPEN = 1 COP watchdog enabled
+                  22  ;
+                  23  ;         MOR = $0d  ensure MOR register is programmed 
+                                                                          thus.
+                  24  ;
+                  25  ;------------------------
+                  26  ; ram variables and flags
+                  27  ;------------------------
+ 00E0             28          org    ramstart
+ 00E0             29  flags   equ    $00e0        ;flag register
+ 00E0             30  count   equ    0            ;count reaction time
+ 00E0             31  beep    equ    1            ;beep flag
+ 00E0             32  best    equ    2            ;best score flag
+ 00E0             33  keyreg  equ    $00e1        ;push button flags
+ 00E0             34  keya    equ    0            ;key a flag
+ 00E0             35  keyap   equ    1            ;key a previous status
+ 00E0             36  atrip   equ    2            ;key a trip
+ 00E0             37  aearly  equ    3            ;key a too early
+ 00E0             38  keyb    equ    4            ;key b flag
+ 00E0             39  keybp   equ    5            ;key b previous status
+ 00E0             40  btrip   equ    6            ;key b trip
+ 00E0             41  bearly  equ    7            ;key b too early
+ 00E0             42  tofcnt  equ    $00e2        ;TOF interrupt counter
+ 00E0             43  rticnt  equ    $00e3        ;RTI interrupt counter
+ 00E0             44  timouth equ    $00e4        ;off time counter h
+ 00E0             45  timoutl equ    $00e5        ;off time counter l
+ 00E0             46  deltim  equ    $00e6        ;beep delay time
+ 00E0             47  units   equ    $00e7        ;scan register units
+ 00E0             48  tens    equ    $00e8        ;scan register tens
+ 00E0             49  hunds   equ    $00e9        ;scan register hundreds
+ 00E0             50  counth  equ    $00ea        ;reaction time count 
+                                                                     register l
+ 00E0             51  countl  equ    $00eb        ;reaction time count 
+                                                                     register h
+ 00E0             52  countah equ    $00ec        ;a key reaction time l
+ 00E0             53  countal equ    $00ed        ;a key reaction time h
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 2
+
+
+
+ 00E0             54  countbh equ    $00ee        ;b key reaction time l
+ 00E0             55  countbl equ    $00ef        ;b key reaction time h
+ 00E0             56  bcountl equ    $00f0        ;best score low byte
+ 00E0             57  bcounth equ    $00f1        ;best score high byte
+                  58  ;-----------------------
+                  59  ; initial power up reset
+                  60  ;-----------------------
+ 0200             61          org    romstart
+                  62  ; when the unit is first connected to a battery
+                  63  ; the k1 powers up through reset.
+                  64  ; all that is required is for the ports to be set up
+                  65  ; and stop mode entered to wait for a key to wake
+                  66  ; the unit up.
+                  67  ;
+                  68  ; initialize port a
+                  69  ;
+ 0200 3F00        70          clr    porta
+ 0202 A6FC        71          lda    #{ddra7.+ddra6.+ddra5.+ddra4.+ddra3.+ddra2
+                                                                             .}
+ 0204 B704        72          sta    ddra
+ 0206 B710        73          sta    pdra
+                  74  ;
+                  75  ; initialize port b
+                  76  ;
+ 0208 3F01        77          clr    portb
+ 020A A603        78          lda    #{ddrb0.+ddrb1.}
+ 020C B705        79          sta    ddrb
+ 020E A6E7        80          lda    #$e7
+ 0210 B7F0        81          sta    bcountl
+ 0212 A603        82          lda    #$03
+ 0214 B7F1        83          sta    bcounth      ;initialize best score to 999
+                  84  ;
+                  85  ; enter stop mode to wait for key interrupt
+                  86  ;
+ 0216 8E          87          stop
+                  88  ;-----------------
+                  89  ; push button wake
+                  90  ;-----------------
+                  91  ; if in stop mode either key will power the k1 up
+                  92  ; via the external interrupt vector.
+                  93  ;
+ 0217 1F0A        94  wake    bclr   irqe,iscr    ;disable further key 
+                                                                     interrupts
+ 0219 120A        95          bset   irqr,iscr    ;clear interrupt flag
+ 021B A631        96          lda    #{toie.+rtie.+rt0.}   ;RTI rate 16ms
+ 021D B708        97          sta    tcsr         ;enable RTI,TOF timer
+                  98  ;
+                  99  ;initialize ram
+                 100  ;
+ 021F 4F         101  main    clra                ;clears
+ 0220 AEE0       102          ldx    #flags       ;ram from
+ 0222 F7         103  main1   sta    0,x          ;00e0
+ 0223 5C         104          incx                ;clears ram from $e0
+ 0224 A3F0       105          cpx    #$f0         ;to $ef
+ 0226 26FA       106          bne    main1
+                 107  ;
+                 108  ; show keys as pressed so that the interrupt
+                 109  ; routine will ignore the key press that turned the
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 3
+
+
+
+                 110  ; unit on.
+                 111  ;
+ 0228 12E1       112          bset   keyap,keyreg
+ 022A 1AE1       113          bset   keybp,keyreg ;ignore power up key stroke
+ 022C 14E0       114          bset   best,flags   ;show best score
+ 022E 9A         115          cli                 ;enable timer interrupts
+ 022F 12E0       116          bset   beep,flags   ;power up beep
+                 117  ;
+                 118  ; wait for key to start random timer and show
+                 119  ; unit triggered.
+                 120  ;
+ 0231 AD25       121          bsr    anykey
+ 0233 15E0       122          bclr   best,flags   ;now triggered
+                 123  ;
+                 124  ; wait a random time.
+                 125  ; a rti occurs every 32ms, use the current value
+                 126  ; of tofcnt, as a pseudo-random number, and wait until
+                 127  ; this many rti interrupts have occured.
+                 128  ;
+ 0235 3FE3       129          clr    rticnt
+ 0237 B6E2       130          lda    tofcnt
+ 0239 B1E3       131  main2   cmp    rticnt
+ 023B 26FC       132          bne    main2
+                 133  ;
+                 134  ; once the random time has expired,check to see if 
+                                                                      anyone is
+                 135  ; cheating by pressing the button repeatedly, if so, set 
+                                                                            the
+                 136  ; too early flag.
+                 137  ;
+ 023D 01E102     138          brclr  keya,keyreg,main3 ;key a been pressed 
+                                                          since unit triggered?
+ 0240 16E1       139          bset   aearly,keyreg     ;a player too early
+ 0242 09E102     140  main3   brclr  keyb,keyreg,main4 ;ket b been pressed 
+                                                          since unit triggered?
+ 0245 1EE1       141          bset   bearly,keyreg     ;b player too early
+                 142  ;
+                 143  ; count reaction time.
+                 144  ; once the random delay has finished, enable count mode.
+                 145  ; do the beep while in count mode to ensure that any keys
+                 146  ; pressed during the beep are registered.
+                 147  ;
+ 0247 10E0       148  main4   bset   count,flags  ;enable count mode
+ 0249 12E0       149          bset   beep,flags   ;initiate beep
+                 150  ;
+                 151  ; once count mode has been entered the tof interrupt
+                 152  ; routine will count milliseconds elapsed and save the
+                 153  ; time elapsed when the keys are pressed.
+                 154  ; when 999 milliseconds have elapsed, the tof interrupt
+                 155  ; routine will disable count mode to show that the
+                 156  ; timing period is finished.
+                 157  ;
+ 024B 00E0FD     158  main5   brset  count,flags,main5     ;wait until count 
+                                                                  mode finished
+                 159  ;
+                 160  ; when the timing period has finished,show the results
+                 161  ; only (and ignore the keys) so that any very late key 
+                                                                        presses
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 4
+
+
+
+                 162  ; do not skip displaying results entirely.
+                 163  ;
+ 024E A63F       164          lda    #63          ;show results for 2 seconds
+ 0250 B1E3       165  main6   cmp    rticnt
+ 0252 26FC       166          bne    main6
+                 167  ;
+                 168  ; now allow key press to restart
+                 169  ;
+ 0254 AD02       170          bsr    anykey       ;display results until 
+                                                                       keypress
+ 0256 20C7       171          bra    main         ;restart
+                 172  ;-----------------
+                 173  ; wait for any key
+                 174  ;-----------------
+ 0258 11E1       175  anykey  bclr   keya,keyreg
+ 025A 19E1       176          bclr   keyb,keyreg  ;clear any key press
+ 025C 00E103     177  anyky1  brset  keya,keyreg,anyky2    ;key a?
+ 025F 09E1FA     178          brclr  keyb,keyreg,anyky1    ;key b?
+ 0262 11E1       179  anyky2  bclr   keya,keyreg
+ 0264 19E1       180          bclr   keyb,keyreg  ;clear key flags
+ 0266 12E0       181          bset   beep,flags
+ 0268 02E0FD     182  anyky3  brset  beep,flags,anyky3     ;wait until beep 
+                                                                       finished
+ 026B 81         183          rts
+                 184  ;--------------------------------
+                 185  ; timer interrupt service routine
+                 186  ;--------------------------------
+ 026C 0E0803     187  timer   brset  tof,tcsr,tofint       ;tof interrupt
+ 026F CC0311     188          jmp    rtint        ;real time interrupt
+                 189  ;-------------------------
+                 190  ; timer overflow interrupt
+                 191  ;-------------------------
+                 192  ; tof interrupts occur every 0.5 ms, the tof interrupt
+                 193  ; routine handles incrementing the reaction time, 
+                                                                   performs the
+                 194  ; beep and checks for key presses.
+                 195  ;
+ 0272 1608       196  tofint  bset   tofr,tcsr    ;clear tof interrupt
+ 0274 3CE2       197          inc    tofcnt
+ 0276 03E012     198          brclr  beep,flags,tofit2     ;beep on?
+                 199  ;
+                 200  ; do one beep cycle
+                 201  ;
+ 0279 1201       202          bset   1,portb      ;one tof interrupt occurs
+ 027B A653       203          lda    #$53         ;every 0.5 mS (f = 2KHz)
+ 027D 4A         204  tofit1  deca                ;so delay for 0.25 mS to
+ 027E 26FD       205          bne    tofit1       ;produce a 2KHz square wave
+ 0280 1301       206          bclr   1,portb      ;to drive the buzzer
+ 0282 3CE6       207          inc    deltim       ;inc cycle count
+ 0284 0FE604     208          brclr  7,deltim,tofit2       ;finished beep?
+ 0287 13E0       209          bclr   beep,flags   ;reset beep flag - beep done
+ 0289 3FE6       210          clr    deltim       ;clear cycle count
+                 211  ;
+                 212  ; increment reaction time counter
+                 213  ;
+ 028B 01E01B     214  tofit2  brclr  count,flags,tstkey    ;not in count mode
+                 215  ;
+                 216  ; as TOF's occur each 0.5mS, only count every second one.
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 5
+
+
+
+                 217  ;
+ 028E 01E218     218          brclr  0,tofcnt,tstkey       ;count every second 
+                                                                            TOF
+ 0291 A603       219          lda    #$03         ;has the
+ 0293 B1EA       220          cmp    counth       ;count reached
+ 0295 260C       221          bne    tofit4       ;999?
+ 0297 A6E7       222          lda    #$e7
+ 0299 B1EB       223          cmp    countl
+ 029B 2606       224          bne    tofit4       ;no, increment count
+ 029D 11E0       225          bclr   count,flags  ;yes, stop count
+                 226  ;
+                 227  ; clear rticnt so that the show results routine will show
+                 228  ; the results in the correct order.
+                 229  ;
+ 029F 3FE3       230          clr    rticnt
+ 02A1 2006       231          bra    tstkey       ;check the push buttons
+                 232  ;
+                 233  ; increment 16 bit counter
+                 234  ;
+ 02A3 3CEB       235  tofit4  inc    countl
+ 02A5 2602       236          bne    tstkey
+ 02A7 3CEA       237          inc    counth
+                 238  ;---------------
+                 239  ; key a pressed?
+                 240  ;---------------
+                 241  ; the test key routine looks for a rising edge on the
+                 242  ; port lines, to identify a keypress.
+                 243  ; it save the previous level of the port line so that
+                 244  ; it can determine wether the port line has had a low to
+                 245  ; high transition.
+ 02A9 020004     246  tstkey  brset  pa1,porta,pbkeya      ;key a pressed?
+ 02AC 13E1       247          bclr   keyap,keyreg          ;no, clear previous 
+                                                                         status
+ 02AE 2020       248          bra    pbkeyb                ;check b key
+                 249  ;
+                 250  ; key a pressed was it pressed last time?
+                 251  ;
+ 02B0 02E11D     252  pbkeya  brset  keyap,keyreg,pbkeyb   ;pressed last time?
+ 02B3 10E1       253          bset   keya,keyreg           ;no,set key a flag
+ 02B5 12E1       254          bset   keyap,keyreg          ;set previous status
+ 02B7 3FE5       255          clr    timoutl
+ 02B9 3FE4       256          clr    timouth               ;reset timeout
+                 257  ;
+                 258  ; check reaction time
+                 259  ;
+ 02BB 01E012     260          brclr  count,flags,pbkeyb    ;skip if not count 
+                                                                           mode
+ 02BE 06E10F     261          brset  aearly,keyreg,pbkeyb  ;a key too early so 
+                                                                         ignore
+ 02C1 04E10C     262          brset  atrip,keyreg,pbkeyb   ;key a already 
+                                                                       tripped?
+ 02C4 14E1       263          bset   atrip,keyreg ;set key a trip
+ 02C6 AD2F       264          bsr    chkbs        ;check for new best score
+ 02C8 B6EB       265          lda    countl
+ 02CA B7ED       266          sta    countal
+ 02CC B6EA       267          lda    counth
+ 02CE B7EC       268          sta    countah      ;save a key reaction time
+                 269  ;---------------
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 6
+
+
+
+                 270  ; key b pressed?
+                 271  ;---------------
+ 02D0 000003     272  pbkeyb  brset  pa0,porta,pbkyb1      ;key b pressed?
+ 02D3 1BE1       273          bclr   keybp,keyreg ;no,clear previous status
+ 02D5 80         274          rti
+                 275  ;
+                 276  ; key b pressed was it pressed last time?
+                 277  ;
+ 02D6 0AE11D     278  pbkyb1  brset  keybp,keyreg,pbkyb2   ;pressed last time?
+ 02D9 18E1       279          bset   keyb,keyreg  ;no,set key b flag
+ 02DB 1AE1       280          bset   keybp,keyreg ;set previous status
+ 02DD 3FE5       281          clr    timoutl
+ 02DF 3FE4       282          clr    timouth      ;reset timeout
+                 283  ;
+                 284  ; check reaction time
+                 285  ;
+ 02E1 01E012     286          brclr  count,flags,pbkyb2    ;skip if not count 
+                                                                           mode
+ 02E4 0EE10F     287          brset  bearly,keyreg,pbkyb2  ;b key too early so 
+                                                                         ignore
+ 02E7 0CE10C     288          brset  btrip,keyreg,pbkyb2   ;key b already 
+                                                                       tripped?
+ 02EA 1CE1       289          bset   btrip,keyreg          ;set key b trip
+ 02EC AD09       290          bsr    chkbs        ;check for new best score
+ 02EE B6EB       291          lda    countl       ;save reaction time
+ 02F0 B7EF       292          sta    countbl
+ 02F2 B6EA       293          lda    counth
+ 02F4 B7EE       294          sta    countbh
+ 02F6 80         295  pbkyb2  rti
+                 296  ;------------------------------------------------
+                 297  ; check if time is better than current best score
+                 298  ;------------------------------------------------
+ 02F7 BEEA       299  chkbs   ldx    counth
+ 02F9 B6EB       300          lda    countl       ;get count
+ 02FB B0F0       301          sub    bcountl      ;check low byte
+ 02FD 2605       302          bne    chkbs1
+ 02FF 9F         303          txa
+ 0300 B0F1       304          sub    bcounth
+ 0302 270C       305          beq    chkbs2       ;both the same
+ 0304 9F         306  chkbs1  txa
+ 0305 B2F1       307          sbc    bcounth
+ 0307 2A07       308          bpl    chkbs2       ;slower than current best 
+                                                                          score
+ 0309 B6EB       309          lda    countl       ;new best score!
+ 030B B7F0       310          sta    bcountl
+ 030D 9F         311          txa
+ 030E B7F1       312          sta    bcounth      ;save new best score
+ 0310 81         313  chkbs2  rts
+                 314  ;--------------------
+                 315  ; real time interrupt
+                 316  ;--------------------
+                 317  ;the RTI interrupt occurs every 16 mS, it is used
+                 318  ;to :
+                 319  ;     - count the time since the last key was
+                 320  ;       pressed to go into stop mode after one minute
+                 321  ;     - handle the displaying of the results
+                 322  ;     - scanning the display
+                 323  ;
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 7
+
+
+
+ 0311 1408       324  rtint   bset   rtifr,tcsr   ;clear real time interrupt
+ 0313 A600       325          lda    #0
+ 0315 C703F0     326          sta    copr         ;clear cop
+ 0318 3CE3       327          inc    rticnt       ;increment rti counter
+                 328  ;
+                 329  ; time to power down?
+                 330  ;
+ 031A B6E5       331          lda    timoutl
+ 031C A1A6       332          cmp    #$a6
+ 031E 260A       333          bne    rtint2
+ 0320 B6E4       334          lda    timouth
+ 0322 A10E       335          cmp    #$0e
+ 0324 2604       336          bne    rtint2
+                 337  ;
+                 338  ; enter stop mode
+                 339  ;
+ 0326 120A       340  rtint1  bset   irqr,iscr    ;reset any pending interrupts
+ 0328 9C         341          rsp                 ;reset stack pointer
+ 0329 8E         342          stop                ;shut down
+                 343  ;
+                 344  ; increment power down counter
+                 345  ;
+ 032A 3CE5       346  rtint2  inc    timoutl
+ 032C 2602       347          bne    show
+ 032E 3CE4       348          inc    timouth
+                 349  ;----------------
+                 350  ; display results
+                 351  ;----------------
+ 0330 00E0C3     352  show    brset  count,flags,pbkyb2    ;skip if in count 
+                                                                           mode
+ 0333 02E0C0     353          brset  beep,flags,pbkyb2     ;skip if beep on
+ 0336 04E119     354          brset  atrip,keyreg,show3    ;key a trip?
+ 0339 0CE10D     355          brset  btrip,keyreg,show1    ;key b trip?
+ 033C B6EB       356          lda    countl                ;no keys tripped
+ 033E BEEA       357          ldx    counth
+ 0340 05E004     358          brclr  best,flags,show0      ;show best score
+ 0343 B6F0       359          lda    bcountl
+ 0345 BEF1       360          ldx    bcounth
+ 0347 2057       361  show0   bra    convert
+                 362  ;
+                 363  ; only key b tripped
+                 364  ;
+ 0349 0BE344     365  show1   brclr  5,rticnt,btime1       ;show __1
+ 034C B6EF       366  show2   lda    countbl
+ 034E BEEE       367          ldx    countbh               ;b -> display
+ 0350 204E       368          bra    convert
+                 369  ;
+                 370  ; keys a and b tripped?
+                 371  ;
+ 0352 0CE109     372  show3   brset  btrip,keyreg,show6    ;key b tripped as 
+                                                                          well?
+                 373  ;
+                 374  ; only key a tripped
+                 375  ;
+ 0355 0BE328     376  show4   brclr  5,rticnt,atime1       ;show 1__
+ 0358 B6ED       377  show5   lda    countal
+ 035A BEEC       378          ldx    countah               ;a -> display
+ 035C 2042       379          bra    convert
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 8
+
+
+
+                 380  ;
+                 381  ; both keys tripped
+                 382  ;
+ 035E B6ED       383  show6   lda    countal
+ 0360 B0EF       384          sub    countbl      ;al - bl
+ 0362 2606       385          bne    show7        ;a = b?
+ 0364 B6EC       386          lda    countah
+ 0366 B0EE       387          sub    countbh      ;ah - bh
+ 0368 27EE       388          beq    show5        ; a = b
+ 036A B6EC       389  show7   lda    countah
+ 036C B2EE       390          sbc    countbh
+ 036E 2B08       391          bmi    show8        ;a < b?
+                 392  ;
+                 393  ; a > b
+                 394  ;
+ 0370 0DE3D6     395          brclr  6,rticnt,show1        ;show b time
+ 0373 0BE30E     396          brclr  5,rticnt,atime2       ;show 2__
+ 0376 20E0       397          bra    show5                 ;a -> display
+                 398  ;
+                 399  ; a < b
+                 400  ;
+ 0378 0DE3DA     401  show8   brclr  6,rticnt,show4        ;show a time
+ 037B 0BE316     402          brclr  5,rticnt,btime2       ;show __2
+ 037E 20CC       403          bra    show2                 ;b -> display
+                 404  ;-----------------------
+                 405  ; display key a win/lose
+                 406  ;-----------------------
+ 0380 A601       407  atime1  lda    #1           ;a won
+ 0382 2002       408          bra    atime3
+ 0384 A602       409  atime2  lda    #2           ;a second
+ 0386 B7E9       410  atime3  sta    hunds        ;show place on a key display
+ 0388 A60F       411          lda    #$0f
+ 038A B7E8       412          sta    tens
+ 038C B7E7       413          sta    units        ;clear other displays
+ 038E 202F       414          bra    scan
+                 415  ;-----------------------
+                 416  ; display key b win/lose
+                 417  ;-----------------------
+ 0390 A601       418  btime1  lda    #1           ;b won
+ 0392 2002       419          bra    btime3
+ 0394 A602       420  btime2  lda    #2           ;b second
+ 0396 B7E7       421  btime3  sta    units        ;show place on b key display
+ 0398 A60F       422          lda    #$0f
+ 039A B7E8       423          sta    tens
+ 039C B7E9       424          sta    hunds        ;clear other displays
+ 039E 201F       425          bra    scan
+                 426  ;---------------
+                 427  ; convert to bcd
+                 428  ;---------------
+                 429  ; entry a = low byte
+                 430  ;       x = high byte
+                 431  ;
+ 03A0 3FE9       432  convert clr    hunds
+ 03A2 3FE8       433          clr    tens
+ 03A4 3FE7       434          clr    units        ;clear scan registers
+ 03A6 A064       435  convet1 sub    #100         ;subtract 100 from
+ 03A8 2504       436          bcs    convet3      ;count until less than 100.
+ 03AA 3CE9       437  convet2 inc    hunds        ;count the number
+
+
+REACT.ASM              Assembled with IASM   09/11/1993  16:42  PAGE 9
+
+
+
+ 03AC 20F8       438          bra    convet1      ;of 100's subtracted.
+                 439  ;
+                 440  ; borrow from msb
+                 441  ;
+ 03AE 5A         442  convet3 decx                ;borrow from msb of count
+ 03AF 2AF9       443          bpl    convet2      ;until nothing to borrow is 
+                                                                          left.
+ 03B1 AB64       444          add    #100         ;add 100 to restore remainder
+                 445  ;
+                 446  ; convert remainder to tens and units
+                 447  ;
+ 03B3 A00A       448  convet4 sub    #10          ;subtract 10 from
+ 03B5 2504       449          bcs    convet5      ;remainder until less than 
+                                                                            10.
+ 03B7 3CE8       450          inc    tens         ;count the number
+ 03B9 20F8       451          bra    convet4      ;of 10's subtracted.
+ 03BB AB0A       452  convet5 add    #10          ;add 10 to restore remainder
+ 03BD B7E7       453          sta    units        ;which will be in BCD.
+                 454  ;-------------
+                 455  ; scan display
+                 456  ;-------------
+ 03BF AEE7       457  scan    ldx    #units       ;point to display buffer
+ 03C1 F6         458  scan1   lda    0,x          ;get bcd to display
+ 03C2 48         459          asla
+ 03C3 48         460          asla
+ 03C4 48         461          asla
+ 03C5 48         462          asla                ;shift to msn to display
+ 03C6 A3E7       463          cpx    #units       ;show units?
+ 03C8 2604       464          bne    scan2
+ 03CA B700       465          sta    porta
+ 03CC 1001       466          bset   0,portb      ;turn on units transistor
+ 03CE A3E8       467  scan2   cpx    #tens        ;show tens?
+ 03D0 2602       468          bne    scan3
+ 03D2 AA04       469          ora    #$04         ;turn on tens transistor
+ 03D4 A3E9       470  scan3   cpx    #hunds       ;show hundreds?
+ 03D6 2602       471          bne    scan4
+ 03D8 AA08       472          ora    #$08         ;turn on hundreds transistor
+ 03DA B700       473  scan4   sta    porta
+ 03DC A6A0       474          lda    #160         ;on time
+ 03DE 4A         475  scan5   deca
+ 03DF 26FD       476          bne    scan5        ;on time delay
+ 03E1 3F01       477          clr    portb        ;turn off
+ 03E3 3F00       478          clr    porta        ;displays
+ 03E5 5C         479          incx
+ 03E6 A3EA       480          cpx    #hunds+1
+ 03E8 26D7       481          bne    scan1        ;scan other displays
+ 03EA 80         482  scan6   rti
+                 483  ;--------
+                 484  ; vectors
+                 485  ;--------
+ 03F8            486          org    vectors
+ 03F8 026C       487          dw     timer        ;timer interrupt service 
+                                                                        routine
+ 03FA 0217       488          dw     wake         ;external interrupt service 
+                                                                        routine
+ 03FC 03EA       489          dw     scan6        ;swi interrupt service 
+                                                                        routine
+ 03FE 0200       490          dw     romstart     ;reset vector
